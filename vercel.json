@@ -1,12 +1,13 @@
 {
-  "version": 2,
-  "name": "railpulse-x",
-  "builds": [
-    { "src": "frontend/package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
-  ],
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "npm --prefix frontend install",
+  "framework": "vite",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://railanukriti.onrender.com/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "build": { "env": { "CI": "true" } }
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

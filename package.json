@@ -1,0 +1,10 @@
+{
+  "name": "railpulse-x",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RailPulse-X: Dynamic Forecast of Expected Time of Arrival (ETA) for Coaching Trains (SIH26028)",
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "start": "npm --prefix frontend run preview"
+  }
+}
