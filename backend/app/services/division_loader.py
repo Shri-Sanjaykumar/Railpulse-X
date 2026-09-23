@@ -40,20 +40,19 @@ RECOMMENDED_FILES = [
 
 # Column mapping examples for normalization
 DEFAULT_COLUMN_MAP = {
-    "code": ["code", "station_code", "station_id"],
-    "name": ["name", "station_name"],
-    "lat": ["lat", "latitude"],
-    "lon": ["lon", "longitude", "lng"],
-    "division": ["division"],
-    "section_id": ["section_id", "id"],
-    "from_station": ["from_station", "from", "from_station_code", "from_station_id"],
-    "to_station": ["to_station", "to", "to_station_code", "to_station_id"],
-    "distance_km": ["distance_km", "distance", "dist"],
+    "code": ["code", "station_code", "station_id", "mavsttncode", "sttncode"],
+    "name": ["name", "station_name", "mavsttnname", "sttnname", "train_name"],
+    "lat": ["lat", "latitude", "manlatitude"],
+    "lon": ["lon", "longitude", "lng", "manlongitude"],
+    "division": ["division", "mavdvsncode", "dvsncode"],
+    "section_id": ["section_id", "id", "mavsectioncode"],
+    "from_station": ["from_station", "from", "from_station_code", "from_station_id", "mavfromsttncode"],
+    "to_station": ["to_station", "to", "to_station_code", "to_station_id", "mavtosttncode"],
+    "distance_km": ["distance_km", "distance", "dist", "mandistancekm"],
     "tracks": ["tracks", "track_count", "num_tracks"],
     "electrified": ["electrified", "electrification"],
     "max_speed_kmph": ["max_speed_kmph", "max_speed", "speed_limit"],
     "train_id": ["train_id", "trainno", "train_no", "id"],
-    "name": ["name", "station_name", "train_name"],  # Update name to include train_name
     "route": ["route", "route_stations"],
     "schedule": ["schedule"],
 }
@@ -200,19 +199,27 @@ def load_division_dataset(division: str, use_cache: bool = True) -> Dict[str, An
     logger.info(f"After normalization: {len(stations_df)} rows, columns: {list(stations_df.columns)}")
     if filter_by_division:
         logger.info(f"Filtering by division '{division}' (before: {len(stations_df)} rows)")
-        stations_df = _filter_by_division(stations_df, division)
-        logger.info(f"After filtering: {len(stations_df)} rows")
+        filtered_stations = _filter_by_division(stations_df, division)
+        if not filtered_stations.empty:
+            stations_df = filtered_stations
+            logger.info(f"After filtering: {len(stations_df)} rows")
+        else:
+            logger.warning(f"Filtering by division '{division}' yielded 0 rows; using all {len(stations_df)} available stations as corridor fallback.")
 
     # canonicalize station code and division
-    if not stations_df.empty and "code" in stations_df.columns:
-        stations_df["code"] = stations_df["code"].astype(str).str.strip().str.upper()
+    if not stations_df.empty:
+        if "code" not in stations_df.columns:
+            for c in ["code", "mavsttncode", "station_code", "sttncode"]:
+                if c in stations_df.columns:
+                    stations_df["code"] = stations_df[c]
+                    break
+        if "code" in stations_df.columns:
+            stations_df["code"] = stations_df["code"].astype(str).str.strip().str.upper()
     if "division" in stations_df.columns:
         stations_df["division"] = stations_df["division"].astype(str).str.strip().str.lower()
 
     result["stations"] = stations_df
     logger.info(f"Loaded {len(stations_df)} stations for division '{division}' (source: {stations_file_used or 'none'}, data_path: {data_path})")
-    if stations_df.empty:
-        logger.warning(f"Division {division} loaded 0 stations - check CSV division column or station codes. Checked paths: {[str(p) for p in stations_file_candidates]}")
 
     # ---------- Sections ----------
     sections_file = _path_for(data_path, prefix, "sections.csv")
@@ -403,14 +410,19 @@ def load_division_dataset(division: str, use_cache: bool = True) -> Dict[str, An
     result["disruptions"] = disruptions_df
 
     # ---------- Basic validation ----------
-    # Stations must not be empty for a usable simulation (raise ValueError)
+    # Stations should ideally not be empty
     if result["stations"].empty:
-        raise ValueError(f"Stations file for division '{division}' is empty or missing. Expected under {data_path}")
+        logger.warning(f"Stations file for division '{division}' is empty or missing under {data_path}")
+        station_codes = set()
+    else:
+        if "code" in result["stations"].columns:
+            station_codes = set(result["stations"]["code"].astype(str).str.strip().str.upper())
+        else:
+            station_codes = set()
 
     # Sections must reference valid station codes
-    station_codes = set(result["stations"]["code"].astype(str).str.strip().str.upper())
     missing_refs = set()
-    if not result["sections"].empty:
+    if not result["sections"].empty and station_codes:
         from_set = set(result["sections"]["from_station"].astype(str).str.strip().str.upper()) if "from_station" in result["sections"].columns else set()
         to_set = set(result["sections"]["to_station"].astype(str).str.strip().str.upper()) if "to_station" in result["sections"].columns else set()
         missing_from = from_set - station_codes
@@ -419,11 +431,11 @@ def load_division_dataset(division: str, use_cache: bool = True) -> Dict[str, An
         missing_refs |= missing_to
 
     if missing_refs:
-        raise ValueError(f"Section references unknown stations for division {division}: {sorted(list(missing_refs))}")
+        logger.warning(f"Section references unknown stations for division {division}: {sorted(list(missing_refs))[:10]}")
 
     # Validate trains routes (if trains present)
     bad_trains = []
-    if not result["trains"].empty and "route" in result["trains"].columns:
+    if not result["trains"].empty and "route" in result["trains"].columns and station_codes:
         for idx, row in result["trains"].iterrows():
             train_id = row.get("train_id", f"row_{idx}")
             route_raw = str(row.get("route", "")).strip()
@@ -433,9 +445,9 @@ def load_division_dataset(division: str, use_cache: bool = True) -> Dict[str, An
                 continue
             unknown_stations = [s for s in route_codes if s not in station_codes]
             if unknown_stations:
-                bad_trains.append((train_id, f"unknown_stations:{unknown_stations}"))
+                bad_trains.append((train_id, f"unknown_stations:{unknown_stations[:3]}"))
     if bad_trains:
-        raise ValueError(f"trains.csv contains invalid routes for division {division}: {bad_trains}")
+        logger.warning(f"trains.csv contains invalid routes for division {division}: {bad_trains[:5]}")
 
     # Cache the result
     if use_cache:

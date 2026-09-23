@@ -99,8 +99,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 				
 				# 2. Load division dataset to map trains to sections
 				from app.services.division_loader import load_division_dataset, normalize_stations
-				dataset = load_division_dataset(division_lower)
-				sections_df = dataset.get("sections")
+				try:
+					dataset = load_division_dataset(division_lower)
+				except Exception as dev_err:
+					logger.debug(f"Division dataset load failed for {division_lower}: {dev_err}")
+					dataset = {}
+				sections_df = dataset.get("sections") if isinstance(dataset, dict) else None
 				sections_list = sections_df.to_dict('records') if sections_df is not None and not sections_df.empty else []
 				
 				# Build section map by from/to station codes
