@@ -1,0 +1,33 @@
+# Node dependencies and build
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.vercel/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Databases
+*.db
+*.sqlite3
+backend/app/rail.db
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log

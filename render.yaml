@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: rail-backend
+    env: python
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt && pip install gunicorn --no-cache-dir"
+    startCommand: "gunicorn -k uvicorn.workers.UvicornWorker -w 1 -b 0.0.0.0:$PORT app.main:app"
+    plan: free
+    region: oregon
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENV
+        value: prod
+      - key: DB_TYPE
+        value: postgresql
+      # Note: DATABASE_URL must be set manually in Render dashboard
+      # Link your existing PostgreSQL database (voice_iq) to this service
+      # The DATABASE_URL will be automatically set when you link the database
+
+
